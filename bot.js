@@ -200,23 +200,23 @@ function calculateHashDistance(hash1, hash2) {
 }
 
 // Find similar media using perceptual hash
-async function findSimilarMedia(hash, mediaType, similarityThreshold = 5) {
+async function findSimilarMedia(hash, mediaType, userId, similarityThreshold = 5) {
   const db = client.db(dbName);
-  
+
   // For traditional crypto hashes, we need an exact match
   if (mediaType !== 'photo' && mediaType !== 'document') {
-    return await db.collection('media').findOne({ hash });
+    return await db.collection('media').findOne({ hash, userId: { $ne: userId } });
   }
-  
+
   // For perceptual hashes, we allow some difference
   const allMedia = await db.collection('media')
-    .find({ mediaType: { $in: ['photo', 'document'] } })
+    .find({ mediaType: { $in: ['photo', 'document'] }, userId: { $ne: userId } })
     .toArray();
-  
+
   // Find the most similar media within threshold
   let mostSimilar = null;
   let lowestDistance = similarityThreshold + 1;
-  
+
   for (const media of allMedia) {
     const distance = calculateHashDistance(hash, media.hash);
     if (distance <= similarityThreshold && distance < lowestDistance) {
@@ -224,7 +224,7 @@ async function findSimilarMedia(hash, mediaType, similarityThreshold = 5) {
       lowestDistance = distance;
     }
   }
-  
+
   return mostSimilar;
 }
 
@@ -627,7 +627,7 @@ bot.on('message', async (msg) => {
         const mediaHash = await hashMedia(mediaBuffer, mediaType);
         
         // Check for similar media in the database using perceptual hash
-        const existingMedia = await findSimilarMedia(mediaHash, mediaType);
+        const existingMedia = await findSimilarMedia(mediaHash, mediaType, userId);
         
         if (existingMedia) {
           // Duplicate found
