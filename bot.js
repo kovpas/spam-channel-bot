@@ -199,18 +199,32 @@ function calculateHashDistance(hash1, hash2) {
   return distance;
 }
 
+// Get query filter to exclude duplicates from same user within 5 minutes
+function getDuplicateCheckFilter(userId) {
+  const SAME_USER_DUPLICATE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+  const fiveMinutesAgo = new Date(Date.now() - SAME_USER_DUPLICATE_WINDOW_MS);
+
+  return {
+    $or: [
+      { userId: { $ne: userId } }, // Different user
+      { userId, timestamp: { $lt: fiveMinutesAgo } } // Same user but older than 5 minutes
+    ]
+  };
+}
+
 // Find similar media using perceptual hash
 async function findSimilarMedia(hash, mediaType, userId, similarityThreshold = 5) {
   const db = client.db(dbName);
+  const duplicateFilter = getDuplicateCheckFilter(userId);
 
   // For traditional crypto hashes, we need an exact match
   if (mediaType !== 'photo' && mediaType !== 'document') {
-    return await db.collection('media').findOne({ hash, userId: { $ne: userId } });
+    return await db.collection('media').findOne({ hash, ...duplicateFilter });
   }
 
   // For perceptual hashes, we allow some difference
   const allMedia = await db.collection('media')
-    .find({ mediaType: { $in: ['photo', 'document'] }, userId: { $ne: userId } })
+    .find({ mediaType: { $in: ['photo', 'document'] }, ...duplicateFilter })
     .toArray();
 
   // Find the most similar media within threshold
